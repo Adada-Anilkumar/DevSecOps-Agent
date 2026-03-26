@@ -7,7 +7,7 @@ Production-ready AI agent for automated security reviews of GitHub Pull Requests
 [![CI/CD](https://github.com/your-org/devsecops-agent/workflows/CI/badge.svg)](https://github.com/your-org/devsecops-agent/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-**🚀 [Quick Start in 5 Minutes](QUICKSTART.md)** | **🆓 [Use FREE Gemini](GEMINI_SETUP.md)** | **📖 [Full Documentation](docs/)** | **🐳 [Deploy to Production](docs/DEPLOYMENT.md)**
+**🚀 [Quick Start in 5 Minutes](QUICKSTART.md)** | **🆓 [Use FREE Gemini](docs/GEMINI_SETUP.md)** | **📖 [Full Documentation](docs/)** | **🐳 [Deploy to Production](docs/DEPLOYMENT.md)**
 
 ## Features
 
@@ -49,24 +49,24 @@ gh pr create --title "Test" --body "Testing agent"
 # 🎉 Agent automatically comments on your PR with FREE Gemini!
 ```
 
-**📖 Gemini Guide:** [GEMINI_SETUP.md](GEMINI_SETUP.md)  
+**📖 Gemini Guide:** [docs/GEMINI_SETUP.md](docs/GEMINI_SETUP.md)  
 **📖 Detailed Guide:** [QUICKSTART.md](QUICKSTART.md)
 
 **Architecture:** See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | **Deployment:** See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
 
 ## 📚 Documentation
 
-**📑 [Complete Documentation Index](INDEX.md)** - Find any document quickly
+**📑 [Complete Documentation Index](docs/INDEX.md)** - Find any document quickly
 
 ### Quick Links
 - **[QUICKSTART.md](QUICKSTART.md)** - Get started in 5 minutes
-- **[GETTING_STARTED.md](GETTING_STARTED.md)** - Choose your deployment path
+- **[docs/GETTING_STARTED.md](docs/GETTING_STARTED.md)** - Choose your deployment path
 - **[docs/LOCAL_TESTING.md](docs/LOCAL_TESTING.md)** - Complete local testing guide
 - **[docs/TESTING_FLOW.md](docs/TESTING_FLOW.md)** - Visual flow diagrams
 - **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** - Production deployment guide
 - **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** - System architecture
 - **[docs/OPERATIONS.md](docs/OPERATIONS.md)** - Day-to-day operations
-- **[IMPROVEMENTS.md](IMPROVEMENTS.md)** - Production improvements summary
+- **[docs/IMPROVEMENTS.md](docs/IMPROVEMENTS.md)** - Production improvements summary
 
 ## 🎯 Use Cases
 
@@ -409,5 +409,6 @@ Your DevSecOps Agent is now **production-ready** with:
 ---
 
 **Made with ❤️ for DevSecOps teams**
-#   D e v S e c O p s - A g e n t  
+#   D e v S e c O p s - A g e n t 
+ 
  
