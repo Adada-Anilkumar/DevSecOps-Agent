@@ -50,13 +50,69 @@ SECRET_PATTERNS = [
     ),
 ]
 
+SUSPICIOUS_ARTIFACT_EXTENSIONS = {
+    ".exe", ".dll", ".so", ".dylib", ".wasm",
+    ".asar", ".apk", ".ipa", ".jar", ".whl",
+    ".bin", ".pyc", ".o", ".obj", ".class",
+}
+
+
+def detect_binary_artifacts(content: str) -> List[str]:
+    """Detect binary or precompiled files referenced in diff or file list."""
+    detected = set()
+    lines = content.splitlines()
+
+    for line in lines:
+        line_clean = line.strip()
+        if line_clean.startswith("diff --git "):
+            parts = line_clean.split()
+            if len(parts) >= 4:
+                path = parts[3].lstrip("b/").strip()
+                if any(path.lower().endswith(ext) for ext in SUSPICIOUS_ARTIFACT_EXTENSIONS):
+                    detected.add(path)
+        elif line_clean.startswith("+++ b/") or line_clean.startswith("--- a/"):
+            path = line_clean[6:].strip()
+            if any(path.lower().endswith(ext) for ext in SUSPICIOUS_ARTIFACT_EXTENSIONS):
+                detected.add(path)
+        elif "Binary files " in line_clean and " differ" in line_clean:
+            parts = line_clean.split()
+            for part in parts:
+                cleaned_part = part.lstrip("b/").lstrip("a/")
+                if any(cleaned_part.lower().endswith(ext) for ext in SUSPICIOUS_ARTIFACT_EXTENSIONS):
+                    detected.add(cleaned_part)
+        elif not any(line_clean.startswith(prefix) for prefix in ["diff ", "index ", "--- ", "+++ ", "@@ "]):
+            if any(line_clean.lower().endswith(ext) for ext in SUSPICIOUS_ARTIFACT_EXTENSIONS) and " " not in line_clean:
+                detected.add(line_clean)
+
+    return sorted(list(detected))
+
 
 def scan_for_secrets(
     content: str,
     default_filename: Optional[str] = None,
 ) -> List[ReviewIssue]:
-    """Scan content line-by-line for high-confidence hardcoded secrets."""
+    """Scan content line-by-line for high-confidence hardcoded secrets and committed binaries."""
     findings: List[ReviewIssue] = []
+
+    # 1. Check for suspicious binary/precompiled artifacts
+    binary_files = detect_binary_artifacts(content)
+    for b_file in binary_files:
+        findings.append(
+            ReviewIssue(
+                file_path=b_file,
+                line_number=1,
+                category=Category.SECURITY,
+                severity=SeverityLevel.HIGH,
+                title=f"Committed Binary / Compiled Asset: {b_file}",
+                description=(
+                    f"Committed precompiled binary '{b_file}' detected in changes. "
+                    "Precompiled binaries introduce software supply chain blindspots, "
+                    "bypass standard source code SAST, and violate SLSA provenance."
+                ),
+                suggested_fix="Remove compiled binaries from version control; build reproducible binaries during CI/CD or fetch from trusted package registries.",
+                educational_note="Supply chain attacks (such as XZ Utils CVE-2024-3094) often leverage committed opaque blobs or pre-packaged binaries to slip past human reviewers.",
+            )
+        )
     lines = content.splitlines()
 
     is_unified_diff = (

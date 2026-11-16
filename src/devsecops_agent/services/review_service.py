@@ -24,6 +24,8 @@ def review_code(
     review_mode: str = "comprehensive",
     prompt_style: str = "compact",
     enable_prescan: bool = True,
+    with_rea: bool = False,
+    target_artifact: Optional[str] = None,
     output_format: str = "structured",  # "structured" | "markdown"
 ) -> Union[ReviewResult, str]:
     """Universal code and diff review entry point with deterministic pre-scan & structured output.
@@ -38,6 +40,8 @@ def review_code(
         review_mode: comprehensive, security, architecture, infrastructure
         prompt_style: detailed, compact, or ultra
         enable_prescan: Run regex pre-scan for hardcoded secrets & critical keys
+        with_rea: Enable morluto/rea reverse engineering for binary/packaged assets
+        target_artifact: Direct path to binary/ASAR/bundle artifact to inspect
         output_format: "structured" (returns ReviewResult) or "markdown" (returns str)
     """
     prescan_issues: list[ReviewIssue] = []
@@ -45,6 +49,23 @@ def review_code(
         prescan_issues = scan_for_secrets(content)
         if prescan_issues:
             logger.info("Deterministic pre-scanner flagged issues", count=len(prescan_issues))
+
+    # Optional morluto/rea reverse engineering inspection
+    if with_rea or target_artifact:
+        try:
+            from devsecops_agent.analyzers.rea_bridge import REABridge
+            from devsecops_agent.utils.pre_scan import detect_binary_artifacts
+
+            bridge = REABridge()
+            artifacts_to_scan = [target_artifact] if target_artifact else detect_binary_artifacts(content)
+
+            for art_path in artifacts_to_scan:
+                if art_path:
+                    res = bridge.analyze_artifact(art_path)
+                    rea_issues = bridge.convert_analysis_to_issues(art_path, res)
+                    prescan_issues.extend(rea_issues)
+        except Exception as e:
+            logger.warning("Reverse engineering analysis error via REA bridge", error=str(e))
 
     # If RAG is requested, run via LCEL chain
     if use_rag:

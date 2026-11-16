@@ -11,6 +11,7 @@ Production-ready AI agent for automated security reviews of GitHub Pull Requests
 
 ## Features
 
+- 🔬 **Binary & Supply Chain Reverse Engineering (morluto/rea)** - Optional bridge to inspect committed binaries (.so, .dll, .wasm, .asar, .apk) for embedded malicious endpoints, hidden APIs, and supply chain backdoors.
 - 🆓 **FREE Gemini Support & Auto-Failover** - Native Gemini 1.5/2.0 support with automatic fallback to OpenAI if limits are exceeded.
 - 🎯 **Structured Output & SARIF 2.1.0** - Machine-readable Pydantic schemas (ReviewResult) and SARIF export for GitHub Security integration.
 - 🔍 **Deterministic Secret Pre-Scanner** - Catches hardcoded AWS keys, private keys, and tokens prior to LLM invocation with zero hallucinations.

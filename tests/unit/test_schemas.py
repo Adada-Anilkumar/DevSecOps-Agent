@@ -52,3 +52,4 @@ def test_review_result_sarif_export():
     res = sarif["runs"][0]["results"][0]
     assert res["level"] == "error"
     assert res["locations"][0]["physicalLocation"]["artifactLocation"]["uri"] == "app.py"
+

@@ -39,3 +39,4 @@ def hello_world():
 """
     findings = scan_for_secrets(content)
     assert len(findings) == 0
+

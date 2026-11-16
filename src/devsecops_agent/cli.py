@@ -72,6 +72,16 @@ def main() -> None:
         help="Disable deterministic regex pre-scanner for secrets",
     )
     parser.add_argument(
+        "--with-rea",
+        action="store_true",
+        help="Enable morluto/rea reverse engineering for detected binary/ASAR assets",
+    )
+    parser.add_argument(
+        "--artifact",
+        metavar="PATH",
+        help="Target binary, ASAR, or packaged artifact to inspect with morluto/rea",
+    )
+    parser.add_argument(
         "--language",
         "-l",
         help="Language or runtime hint (e.g. python, TypeScript, Go)",
@@ -153,6 +163,8 @@ def main() -> None:
         use_rag=args.rag,
         rag_k=args.rag_k,
         enable_prescan=not args.no_prescan,
+        with_rea=args.with_rea,
+        target_artifact=args.artifact,
         output_format=req_format,
     )
 
