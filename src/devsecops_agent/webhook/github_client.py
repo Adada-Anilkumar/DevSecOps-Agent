@@ -1,13 +1,14 @@
-"""GitHub REST: verify webhook, fetch PR diff, post issue comment."""
+"""GitHub REST: verify webhook, fetch PR diff, post reviews, inline comments, and issue comments."""
 
 from __future__ import annotations
 
 import hashlib
 import hmac
-from typing import Any
+from typing import Any, List, Optional
 
 import httpx
 
+from devsecops_agent.schemas import ReviewResult, SeverityLevel
 from devsecops_agent.settings import get_settings
 from devsecops_agent.utils.logging_config import get_logger
 
@@ -82,6 +83,69 @@ def post_issue_comment(
     if r.status_code >= 400:
         logger.error("GitHub comment API error", status=r.status_code, response=r.text[:500])
     r.raise_for_status()
+    return r.json()
+
+
+def post_pr_review(
+    owner: str,
+    repo: str,
+    pull_number: int,
+    commit_sha: str,
+    review_result: ReviewResult,
+    token: str,
+) -> dict[str, Any]:
+    """Submit a GitHub Pull Request Review with top-level summary and inline line comments."""
+    url = f"{github_api_base()}/repos/{owner}/{repo}/pulls/{pull_number}/reviews"
+
+    inline_comments: List[dict[str, Any]] = []
+    for issue in review_result.issues:
+        if issue.file_path and issue.line_number:
+            comment_body = (
+                f"### [{issue.severity.value}] {issue.title}\n\n"
+                f"{issue.description.strip()}\n"
+            )
+            if issue.suggested_fix:
+                comment_body += f"\n```suggestion\n{issue.suggested_fix.strip()}\n```\n"
+            if issue.educational_note:
+                comment_body += f"\n> 💡 **Why this matters**: {issue.educational_note.strip()}"
+
+            inline_comments.append({
+                "path": issue.file_path,
+                "line": issue.line_number,
+                "side": "RIGHT",
+                "body": comment_body,
+            })
+
+    # Event determination
+    if review_result.overall_severity == SeverityLevel.CRITICAL:
+        event = "REQUEST_CHANGES"
+    elif review_result.overall_severity in [SeverityLevel.HIGH, SeverityLevel.MEDIUM]:
+        event = "COMMENT"
+    else:
+        event = "APPROVE"
+
+    payload = {
+        "commit_id": commit_sha,
+        "body": review_result.to_markdown(),
+        "event": event,
+        # GitHub limits comments array per review payload
+        "comments": inline_comments[:25],
+    }
+
+    with httpx.Client(timeout=60.0) as client:
+        r = client.post(
+            url,
+            headers=_headers(token),
+            json=payload,
+        )
+    if r.status_code >= 400:
+        logger.warning(
+            "GitHub PR review submission failed; falling back to standard comment",
+            status=r.status_code,
+            response=r.text[:300],
+        )
+        # Fall back to standard issue comment
+        return post_issue_comment(owner, repo, pull_number, review_result.to_markdown(), token)
     return r.json()
 
 

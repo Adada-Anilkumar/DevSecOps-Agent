@@ -213,6 +213,7 @@ Focus on infrastructure and operational security issues.
 def build_user_message(
     diff_text: str,
     *,
+    is_diff: bool = True,
     language: str | None = None,
     extra_context: str | None = None,
     review_mode: str = "comprehensive",
@@ -221,7 +222,8 @@ def build_user_message(
     """Build enhanced user message with context enrichment.
     
     Args:
-        diff_text: The git diff to review
+        diff_text: The git diff or code snippet to review
+        is_diff: Whether the content is a git diff (True) or raw source/snippet (False)
         language: Programming language/runtime hint
         extra_context: Additional context from user
         review_mode: Type of review (comprehensive, security, architecture, infrastructure)
@@ -297,11 +299,19 @@ def build_user_message(
         parts.append("**Detected**: Docker Compose - Review network isolation, secrets, volume permissions, exposed ports")
     
     parts.append("")
-    parts.append("## Code Changes to Review")
-    parts.append("")
-    parts.append("```diff")
-    parts.append(diff_text.strip())
-    parts.append("```")
+    if is_diff:
+        parts.append("## Code Changes to Review (Diff)")
+        parts.append("")
+        parts.append("```diff")
+        parts.append(diff_text.strip())
+        parts.append("```")
+    else:
+        parts.append("## Source Code / Snippet to Review")
+        parts.append("")
+        fence_lang = language.lower() if language else ""
+        parts.append(f"```{fence_lang}")
+        parts.append(diff_text.strip())
+        parts.append("```")
     parts.append("")
     
     # Add extra context if provided

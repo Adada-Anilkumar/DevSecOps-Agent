@@ -1,10 +1,100 @@
-"""Run security review (direct or RAG) — single entry for CLI + GitHub webhook."""
+"""Run security review (direct, structured, or RAG) — unified entry for CLI, API, & GitHub webhook."""
 
 from __future__ import annotations
 
-from devsecops_agent.chains.review_chain import run_rag_review
+from typing import Optional, Union
+
 from devsecops_agent.prompts import build_user_message, get_system_prompt
-from devsecops_agent.reviewer import run_review
+from devsecops_agent.reviewer import run_review, run_structured_review
+from devsecops_agent.schemas import Category, ReviewIssue, ReviewResult, SeverityLevel
+from devsecops_agent.utils.logging_config import get_logger
+from devsecops_agent.utils.pre_scan import scan_for_secrets
+
+logger = get_logger(__name__)
+
+
+def review_code(
+    content: str,
+    *,
+    is_diff: bool = True,
+    language: Optional[str] = None,
+    extra_context: Optional[str] = None,
+    use_rag: bool = False,
+    rag_k: int = 6,
+    review_mode: str = "comprehensive",
+    prompt_style: str = "compact",
+    enable_prescan: bool = True,
+    output_format: str = "structured",  # "structured" | "markdown"
+) -> Union[ReviewResult, str]:
+    """Universal code and diff review entry point with deterministic pre-scan & structured output.
+
+    Args:
+        content: Unified git diff, single file content, or code snippet
+        is_diff: True if content is a unified diff, False if source snippet/file
+        language: Programming language / runtime hint
+        extra_context: Additional architecture or deployment context
+        use_rag: Whether to augment with RAG vector store policy
+        rag_k: Top-K chunks to retrieve when RAG is active
+        review_mode: comprehensive, security, architecture, infrastructure
+        prompt_style: detailed, compact, or ultra
+        enable_prescan: Run regex pre-scan for hardcoded secrets & critical keys
+        output_format: "structured" (returns ReviewResult) or "markdown" (returns str)
+    """
+    prescan_issues: list[ReviewIssue] = []
+    if enable_prescan:
+        prescan_issues = scan_for_secrets(content)
+        if prescan_issues:
+            logger.info("Deterministic pre-scanner flagged issues", count=len(prescan_issues))
+
+    # If RAG is requested, run via LCEL chain
+    if use_rag:
+        from devsecops_agent.chains.review_chain import run_rag_review
+        report = run_rag_review(
+            content,
+            language=language,
+            extra_context=extra_context,
+            rag_k=rag_k,
+            review_mode=review_mode,
+            prompt_style=prompt_style,
+        )
+        if output_format == "structured":
+            # Wrap RAG markdown result in ReviewResult structure
+            highest_sev = SeverityLevel.CRITICAL if prescan_issues else SeverityLevel.INFO
+            res = ReviewResult(
+                summary="Policy-augmented security review completed.",
+                overall_severity=highest_sev,
+                recommended_action="REQUEST_CHANGES" if prescan_issues else "COMMENT",
+                issues=prescan_issues,
+            )
+            return res
+        return report
+
+    # Build prompts
+    system_prompt = get_system_prompt(review_mode, prompt_style)
+    user_message = build_user_message(
+        content,
+        is_diff=is_diff,
+        language=language,
+        extra_context=extra_context,
+        review_mode=review_mode,
+        prompt_style=prompt_style,
+    )
+
+    if output_format == "structured":
+        result = run_structured_review(system_prompt, user_message, schema=ReviewResult)
+        # Merge deterministic pre-scan issues if any
+        if prescan_issues:
+            result.issues = prescan_issues + result.issues
+            result.overall_severity = SeverityLevel.CRITICAL
+            result.recommended_action = "REQUEST_CHANGES"
+        return result
+
+    # Standard Markdown flow
+    markdown_report = run_review(system_prompt, user_message)
+    if prescan_issues:
+        prescan_summary = "\n".join([f"- 🚨 **CRITICAL**: {issue.title} - {issue.description}" for issue in prescan_issues])
+        markdown_report = f"### 🛡️ Critical Pre-Scan Alerts\n{prescan_summary}\n\n---\n\n{markdown_report}"
+    return markdown_report
 
 
 def run_security_review(
@@ -17,40 +107,17 @@ def run_security_review(
     review_mode: str = "comprehensive",
     prompt_style: str = "compact",
 ) -> str:
-    """Run security review with enhanced multi-persona analysis.
-    
-    Args:
-        diff_text: Git diff to review
-        language: Programming language hint
-        extra_context: Additional context
-        use_rag: Enable RAG for policy-aware reviews
-        rag_k: Number of policy chunks to retrieve
-        review_mode: Review mode (comprehensive, security, architecture, infrastructure)
-        prompt_style: Prompt style (detailed or compact for token efficiency)
-        
-    Returns:
-        Markdown-formatted review report
-    """
-    if use_rag:
-        return run_rag_review(
-            diff_text,
-            language=language,
-            extra_context=extra_context,
-            rag_k=rag_k,
-            review_mode=review_mode,
-            prompt_style=prompt_style,
-        )
-    
-    # Get appropriate system prompt for review mode and style
-    system_prompt = get_system_prompt(review_mode, prompt_style)
-    
-    # Build enhanced user message with context enrichment
-    user_message = build_user_message(
+    """Backwards-compatible wrapper returning markdown report."""
+    result = review_code(
         diff_text,
+        is_diff=True,
         language=language,
         extra_context=extra_context,
+        use_rag=use_rag,
+        rag_k=rag_k,
         review_mode=review_mode,
         prompt_style=prompt_style,
+        enable_prescan=True,
+        output_format="markdown",
     )
-    
-    return run_review(system_prompt, user_message)
+    return str(result)

@@ -11,15 +11,15 @@ Production-ready AI agent for automated security reviews of GitHub Pull Requests
 
 ## Features
 
-- 🆓 **FREE Gemini Support** - No credit card required!
-- 🤖 **AI-Powered Analysis** - Gemini 1.5 or GPT-4/GPT-3.5
-- 📚 **RAG Support** - Retrieval-Augmented Generation with your security policies
-- 🔄 **GitHub Integration** - Automatic PR reviews via webhooks
-- 📊 **Monitoring** - Prometheus metrics and Grafana dashboards
-- 🔒 **Enterprise Security** - Rate limiting, signature verification, input validation
-- 🚀 **Production Ready** - Docker, Kubernetes, horizontal scaling
-- 💰 **Cost Tracking** - Real-time token usage and cost estimation
-- 🧪 **Fully Tested** - Comprehensive unit and integration tests
+- 🆓 **FREE Gemini Support & Auto-Failover** - Native Gemini 1.5/2.0 support with automatic fallback to OpenAI if limits are exceeded.
+- 🎯 **Structured Output & SARIF 2.1.0** - Machine-readable Pydantic schemas (ReviewResult) and SARIF export for GitHub Security integration.
+- 🔍 **Deterministic Secret Pre-Scanner** - Catches hardcoded AWS keys, private keys, and tokens prior to LLM invocation with zero hallucinations.
+- 💬 **GitHub Inline PR Reviews** - Posts line-level review comments directly on pull request diffs via GitHub Reviews API.
+- 🤖 **Multi-Persona DevSecOps Analysis** - Security Architect, Lead Code Reviewer, AppSec Tester, Infra Architect, and SRE Lead.
+- 📚 **RAG Support** - Policy-aware retrieval augmented with your security guidelines via ChromaDB.
+- 🚦 **CI/CD Quality Gates** - CLI flags (--fail-on [CRITICAL|HIGH]) returning non-zero exit codes for automated pipeline gating.
+- 📊 **Monitoring & Observability** - Prometheus metrics, Grafana dashboards, and real-time token cost tracking.
+- 🔒 **Enterprise Security** - Webhook signature verification (HMAC SHA-256), rate limiting, and input sanitization.
 
 ## Quick Demo
 

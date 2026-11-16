@@ -1,14 +1,15 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
 
 from devsecops_agent.prompts import build_user_message
-from devsecops_agent.rag.ingest import ingest_directory
-from devsecops_agent.services.review_service import run_security_review
+from devsecops_agent.schemas import ReviewResult, SeverityLevel
+from devsecops_agent.services.review_service import review_code
 from devsecops_agent.settings import get_settings
 
 
@@ -24,7 +25,7 @@ def _read_diff(path: str | None) -> str:
 def main() -> None:
     load_dotenv()
     parser = argparse.ArgumentParser(
-        description="DevSecOps PR review agent: LLM review with optional LangChain RAG.",
+        description="DevSecOps Code & PR Review Agent: Mentorship & AppSec analysis with optional RAG.",
     )
     parser.add_argument(
         "--ingest",
@@ -43,9 +44,37 @@ def main() -> None:
         help="Unified diff file path, or '-' / omit for stdin",
     )
     parser.add_argument(
+        "--file",
+        "-f",
+        metavar="PATH",
+        help="Source code file path to review directly (non-diff mode)",
+    )
+    parser.add_argument(
+        "--snippet",
+        "-s",
+        metavar="CODE",
+        help="Inline raw code snippet string to review directly",
+    )
+    parser.add_argument(
+        "--format",
+        choices=["markdown", "json", "sarif"],
+        default="markdown",
+        help="Output format: markdown, json (structured), or sarif (for GitHub Security / CI upload)",
+    )
+    parser.add_argument(
+        "--fail-on",
+        choices=["CRITICAL", "HIGH", "MEDIUM", "LOW"],
+        help="CI/CD gate threshold: exit code 1 if issues equal or exceed this severity",
+    )
+    parser.add_argument(
+        "--no-prescan",
+        action="store_true",
+        help="Disable deterministic regex pre-scanner for secrets",
+    )
+    parser.add_argument(
         "--language",
         "-l",
-        help="Language or runtime hint (e.g. python3.12, TypeScript)",
+        help="Language or runtime hint (e.g. python, TypeScript, Go)",
     )
     parser.add_argument(
         "--context",
@@ -72,44 +101,94 @@ def main() -> None:
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Print the user message only; do not call the API",
+        help="Print the formatted user message only; do not call LLM API",
     )
     args = parser.parse_args()
 
-    # Get settings instance
     settings = get_settings()
 
-    # Override chroma path if provided
     if args.chroma_path:
         settings.devsecops_chroma_path = Path(args.chroma_path).resolve()
 
     if args.ingest:
+        from devsecops_agent.rag.ingest import ingest_directory
         n = ingest_directory(Path(args.ingest), reset=args.reset)
         print(f"Indexed {n} chunks into {settings.devsecops_chroma_path}")
         return
 
-    diff_text = _read_diff(args.diff)
-    if not diff_text.strip():
-        raise SystemExit("No diff content. Pipe git diff or pass --diff FILE.")
-
-    user_message = build_user_message(
-        diff_text,
-        language=args.language,
-        extra_context=args.context,
-    )
+    # Determine content and input type
+    is_diff = True
+    if args.snippet:
+        content = args.snippet
+        is_diff = False
+    elif args.file:
+        file_path = Path(args.file)
+        if not file_path.is_file():
+            raise SystemExit(f"Not a file: {args.file}")
+        content = file_path.read_text(encoding="utf-8", errors="replace")
+        is_diff = False
+        if not args.language and file_path.suffix:
+            args.language = file_path.suffix.lstrip(".")
+    else:
+        content = _read_diff(args.diff)
+        if not content.strip():
+            raise SystemExit("No content to review. Provide --diff, --file, --snippet, or pipe stdin.")
 
     if args.dry_run:
-        print(user_message)
+        user_msg = build_user_message(
+            content,
+            is_diff=is_diff,
+            language=args.language,
+            extra_context=args.context,
+        )
+        print(user_msg)
         return
 
-    report = run_security_review(
-        diff_text,
+    req_format = "structured" if args.format in ["json", "sarif"] else "markdown"
+    result = review_code(
+        content,
+        is_diff=is_diff,
         language=args.language,
         extra_context=args.context,
         use_rag=args.rag,
         rag_k=args.rag_k,
+        enable_prescan=not args.no_prescan,
+        output_format=req_format,
     )
-    print(report)
+
+    if args.format == "json":
+        if isinstance(result, ReviewResult):
+            print(result.model_dump_json(indent=2))
+        else:
+            print(json.dumps({"review": str(result)}, indent=2))
+    elif args.format == "sarif":
+        if isinstance(result, ReviewResult):
+            print(json.dumps(result.to_sarif(), indent=2))
+        else:
+            print(json.dumps({"error": "SARIF format requires structured output."}, indent=2))
+    else:
+        # Markdown format
+        if isinstance(result, ReviewResult):
+            print(result.to_markdown())
+        else:
+            print(result)
+
+    # CI/CD fail-on threshold check
+    if args.fail_on and isinstance(result, ReviewResult):
+        severity_ranks = {
+            SeverityLevel.CRITICAL: 4,
+            SeverityLevel.HIGH: 3,
+            SeverityLevel.MEDIUM: 2,
+            SeverityLevel.LOW: 1,
+            SeverityLevel.INFO: 0,
+        }
+        threshold_rank = severity_ranks.get(SeverityLevel(args.fail_on), 3)
+        found_max_rank = max(
+            [severity_ranks.get(issue.severity, 0) for issue in result.issues],
+            default=0,
+        )
+        if found_max_rank >= threshold_rank:
+            sys.exit(1)
 
 
 if __name__ == "__main__":
